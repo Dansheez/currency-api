@@ -1,0 +1,13 @@
+scripts:
+  server:
+    - cd src && python manage.py runserver
+  makemigrations:
+    - cd src && python manage.py makemigrations
+  migrate:
+    - cd src && python manage.py migrate
+  shell:
+    - cd src && python manage.py shell
+  test:
+    - cd src && python manage.py test currencies.tests --verbosity 2
+  fetch_data:
+    - cd src && python manage.py populate_database EUR,USD,JPY,PLN -p 1d -i 1h
