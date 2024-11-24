@@ -3,7 +3,7 @@ from django.core.management import CommandError, call_command
 
 class YFinanceTestCase(TestCase):
     def setUp(self):
-        self.command_name = "populate_database"
+        self.command_name = "fetch_data"
 
     def test_symbol_count(self):
         """

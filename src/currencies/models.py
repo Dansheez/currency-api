@@ -25,6 +25,8 @@ class Rate(models.Model):
     quote_currency = models.ForeignKey(Currency, on_delete=models.CASCADE, related_name="quote_currency")
     exchange_rate = models.DecimalField(max_digits=10, decimal_places=3)
     timestamp = models.DateTimeField()
+    # date = models.DateField()
+    # time = models.TimeField(null=True, blank=True)
 
     @property
     def currency_pair(self):
