@@ -1,18 +1,21 @@
 from django.test import TestCase
 from django.core.management import CommandError, call_command
 
+from currencies.management.commands.fetch_data import generate_yfinance_tickers
+from currencies.models import Currency, Rate
+
 class YFinanceTestCase(TestCase):
     def setUp(self):
         self.command_name = "fetch_data"
 
-    def test_symbol_count(self):
+    def test_passing_one_currency_symbol_argument(self):
         """
         Test if command with only one symbol fails.
         """
         with self.assertRaises(CommandError):
             call_command(self.command_name, "USD")
 
-    def test_invalid_currency_symbol_argument(self):
+    def test_digit_check_currency_symbol_argument(self):
         """
         Test if command with symbol with four or two digits fails.
         """
@@ -20,8 +23,6 @@ class YFinanceTestCase(TestCase):
             call_command(self.command_name, 'USD,AAAA')
         with self.assertRaises(CommandError):
             call_command(self.command_name, "USD,AA")
-        # NOTE: maybe test if command runs succesfully with exacty three letters symbols.
-        # Need to rearange how command works to not run too many api calls tho.
 
     def test_invalid_period_argument(self):
         """
@@ -38,3 +39,17 @@ class YFinanceTestCase(TestCase):
         """
         with self.assertRaises(CommandError):
             call_command(self.command_name, "USD,EUR", interval="bbb")
+
+    def test_command_expected_result(self):
+        """
+        Test if command overall result (number of created model instances) because reading multi-level-index csv file from yfinance is a little nightmare. 
+        """
+        self.sample_symbols = "EUR,USD,PLN"
+        self.sample_symbol_list = self.sample_symbols.split(",")
+        call_command(self.command_name, self.sample_symbols, start="2024-11-22", end="2024-11-24") # 1 row for each ticker
+        currency_count = Currency.objects.count()
+        self.assertEqual(currency_count, len(self.sample_symbol_list))
+        expected_rate_count = len(generate_yfinance_tickers(self.sample_symbol_list, False))
+        rate_count = Rate.objects.count()
+        self.assertEqual(rate_count, expected_rate_count)
+

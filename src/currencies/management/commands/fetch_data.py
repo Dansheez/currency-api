@@ -57,12 +57,12 @@ class Command(BaseCommand):
         __update_conflicts = options.get("conflicts")
         __verbose = options.get("verbose")
         _currency_symbol_list = options["currency_symbols"].split(",")
-        _currency_symbol_list = verify_currency_symbol_argument(_currency_symbol_list, __self_exchange)
-        _start, _end = verify_date_arguments(options["start"], options["end"])
-        _period = verify_period_argument(options["period"])
+        _currency_symbol_list = self.verify_currency_symbol_argument(_currency_symbol_list, __self_exchange)
+        _start, _end = self.verify_date_arguments(options["start"], options["end"])
+        _period = self.verify_period_argument(options["period"])
         if (_period is None) and (_start is None) and (_end is None):
             _period = default_period
-        _interval = verify_interval_argument(options["interval"])
+        _interval = self.verify_interval_argument(options["interval"])
 
         # setup
         exchange_tickers = generate_yfinance_tickers(_currency_symbol_list, __self_exchange)
@@ -78,36 +78,36 @@ class Command(BaseCommand):
 
 
 
-def verify_currency_symbol_argument(currency_symbol_list, self_exchange):
-    if (not self_exchange) and (len(currency_symbol_list) < 2):
-        raise CommandError(f"Not enough currency symbols passed without self exchange flag (need at least two)")
-    for symbol in currency_symbol_list:
-        if len(symbol) != 3:
-            raise CommandError(f"Received invalid currecny symbol '{symbol}'. Make sure all symbols you pass are exactly three characters long and separated by a coma (,).")
-    return currency_symbol_list
+    def verify_currency_symbol_argument(self, currency_symbol_list, self_exchange):
+        if (not self_exchange) and (len(currency_symbol_list) < 2):
+            raise CommandError(f"Not enough currency symbols passed without self exchange flag (need at least two)")
+        for symbol in currency_symbol_list:
+            if len(symbol) != 3:
+                raise CommandError(f"Received invalid currecny symbol '{symbol}'. Make sure all symbols you pass are exactly three characters long and separated by a coma (,).")
+        return currency_symbol_list
 
-def verify_period_argument(period):
-    if period:
-        if period not in valid_periods:
-            raise CommandError(f"Received invalid period argument of {period}.\nValid peiods are: {valid_periods}.")
-    return period
+    def verify_period_argument(self, period):
+        if period:
+            if period not in valid_periods:
+                raise CommandError(f"Received invalid period argument of {period}.\nValid peiods are: {valid_periods}.")
+        return period
 
-def verify_interval_argument(interval):
-    if interval:
-        if interval not in valid_intervals:
-            raise CommandError(f"Received invalid interval argument of {interval}.\nValid intervals are: {valid_intervals}.")
-    return default_interval
+    def verify_interval_argument(self, interval):
+        if interval:
+            if interval not in valid_intervals:
+                raise CommandError(f"Received invalid interval argument of {interval}.\nValid intervals are: {valid_intervals}.")
+        return default_interval
 
-def verify_date_arguments(start, end):
-    if (start is not None) and (end is not None):
-        try:
-            start_datetime = datetime.strptime(start, "%Y-%m-%d")
-            end_datetime = datetime.strptime(end, "%Y-%m-%d")
-            if end_datetime <= start_datetime:
-                raise CommandError(f"Received invalid start or end date argument. Make sure end is later date than start.")
-        except ValueError:
-            raise CommandError(f"Received invalid start or end date argument. Make sure you pass both arguments as 'YYYY-MM-DD' formatted strings.")
-    return (start, end)
+    def verify_date_arguments(self, start, end):
+        if (start is not None) and (end is not None):
+            try:
+                start_datetime = datetime.strptime(start, "%Y-%m-%d")
+                end_datetime = datetime.strptime(end, "%Y-%m-%d")
+                if end_datetime <= start_datetime:
+                    raise CommandError(f"Received invalid start or end date argument. Make sure end is later date than start.")
+            except ValueError:
+                raise CommandError(f"Received invalid start or end date argument. Make sure you pass both arguments as 'YYYY-MM-DD' formatted strings.")
+        return (start, end)
 
 
 def get_existing_currencies_dict():
@@ -136,7 +136,7 @@ def generate_yfinance_tickers(currency_symbol_list: List, self_exchange: bool):
     return exchange_tickers
 
 
-def get_data_from_yfinance(exchange_tickers: List, period, interval, start, end):
+def get_data_from_yfinance(exchange_tickers: List, period=default_period, interval=default_interval, start=None, end=None):
     return yf.download(exchange_tickers, period=period, interval=interval, start=start, end=end, group_by="ticker", repair=True, keepna=True, multi_level_index=False)
 
 
