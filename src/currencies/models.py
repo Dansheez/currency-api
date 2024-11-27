@@ -17,16 +17,26 @@ class Currency(models.Model):
     def save(self, *args, **kwargs):
         if self.code:
             self.code = self.code.upper()
-        super().save(*args, **kwargs)
+        if not self.id: # not existed before
+            super().save(*args, **kwargs)
+            # create self-exchange model
+            obj = Currency.objects.get(pk=self.id)
+            Rate.objects.create(base_currency=obj,
+                                quote_currency=obj,
+                                exchange_rate=1.0,
+                                date=None,
+                                time=None)
+        else:
+            super().save(*args, **kwargs)
 
 class Rate(models.Model):
     # id 
     base_currency = models.ForeignKey(Currency, on_delete=models.CASCADE, related_name="base_currency")
     quote_currency = models.ForeignKey(Currency, on_delete=models.CASCADE, related_name="quote_currency")
     exchange_rate = models.DecimalField(max_digits=10, decimal_places=3)
-    timestamp = models.DateTimeField()
-    # date = models.DateField()
-    # time = models.TimeField(null=True, blank=True)
+    # timestamp = models.DateTimeField()
+    date = models.DateField(null=True, blank=True)
+    time = models.TimeField(null=True, blank=True)
 
     @property
     def currency_pair(self):
@@ -34,4 +44,4 @@ class Rate(models.Model):
 
     @classmethod
     def get_latest(cls, **filters):
-        return cls.objects.filter(**filters).order_by("-timestamp").first() or None
+        return cls.objects.filter(**filters).order_by("-date", "-time").first() or None

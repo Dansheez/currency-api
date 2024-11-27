@@ -1,7 +1,7 @@
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
-from itertools import permutations, product
+from itertools import permutations
 from datetime import datetime
 from typing import List, Dict, Tuple, Set
 import pandas as pd
@@ -44,8 +44,6 @@ class Command(BaseCommand):
                             Default is now.
                             E.g. for end="2023-01-01", the last data point will be on "2022-12-31".
                             """)
-        parser.add_argument("--selfexchange", action="store_true",
-                            help="Include exchange from each currency to itself.")
         parser.add_argument("--conflicts", action="store_true",
                             help="Delete already present coflicting rows in the database and replace them with new values.")
         parser.add_argument("--verbose", action="store_true",
@@ -53,11 +51,10 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         # collect arguments
-        __self_exchange = options.get("selfexchange")
         __update_conflicts = options.get("conflicts")
         __verbose = options.get("verbose")
         _currency_symbol_list = options["currency_symbols"].split(",")
-        _currency_symbol_list = self.verify_currency_symbol_argument(_currency_symbol_list, __self_exchange)
+        _currency_symbol_list = self.verify_currency_symbol_argument(_currency_symbol_list)
         _start, _end = self.verify_date_arguments(options["start"], options["end"])
         _period = self.verify_period_argument(options["period"])
         if (_period is None) and (_start is None) and (_end is None):
@@ -65,7 +62,7 @@ class Command(BaseCommand):
         _interval = self.verify_interval_argument(options["interval"])
 
         # setup
-        exchange_tickers = generate_yfinance_tickers(_currency_symbol_list, __self_exchange)
+        exchange_tickers = generate_yfinance_tickers(_currency_symbol_list)
         # api request
         response = get_data_from_yfinance(exchange_tickers, period=_period, interval=_interval, start=_start, end=_end)
         # process
@@ -78,9 +75,9 @@ class Command(BaseCommand):
 
 
 
-    def verify_currency_symbol_argument(self, currency_symbol_list, self_exchange):
-        if (not self_exchange) and (len(currency_symbol_list) < 2):
-            raise CommandError(f"Not enough currency symbols passed without self exchange flag (need at least two)")
+    def verify_currency_symbol_argument(self, currency_symbol_list):
+        if len(currency_symbol_list) < 2:
+            raise CommandError(f"Not enough currency symbols passed (need at least two)")
         for symbol in currency_symbol_list:
             if len(symbol) != 3:
                 raise CommandError(f"Received invalid currecny symbol '{symbol}'. Make sure all symbols you pass are exactly three characters long and separated by a coma (,).")
@@ -90,12 +87,14 @@ class Command(BaseCommand):
         if period:
             if period not in valid_periods:
                 raise CommandError(f"Received invalid period argument of {period}.\nValid peiods are: {valid_periods}.")
-        return period
+            return period
+        return default_period
 
     def verify_interval_argument(self, interval):
         if interval:
             if interval not in valid_intervals:
                 raise CommandError(f"Received invalid interval argument of {interval}.\nValid intervals are: {valid_intervals}.")
+            return interval
         return default_interval
 
     def verify_date_arguments(self, start, end):
@@ -116,20 +115,16 @@ def get_existing_currencies_dict():
     return {obj.code: obj for obj in qs}
 
 
-def generate_yfinance_tickers(currency_symbol_list: List, self_exchange: bool):
+def generate_yfinance_tickers(currency_symbol_list: List):
     """
     Generates ticker labels for every possible permutation of passed list elements.
-    If "self_exchange" flag is set we include exchange to the same currency (i.e.: EURO to EURO).
     Ticker label format is "<base><quote>=X" (i.e.: "EURUSD=X" for exchanging EURO to US Dollar).
     Parameters:
         currency_symbol_list (list): in format of ["EUR", "USD", ...]
     Returns:
         exchange_tickers (list): in format of ["EURUSD=X", "USDEUR=X", ...]
     """
-    if self_exchange:
-        currency_pairs = product(currency_symbol_list, repeat=2)
-    else:
-        currency_pairs = permutations(currency_symbol_list, r=2)
+    currency_pairs = permutations(currency_symbol_list, r=2)
     exchange_tickers = []
     for currency_pair in currency_pairs:
         exchange_tickers.append(f"{currency_pair[0]}{currency_pair[1]}=X")
@@ -137,7 +132,7 @@ def generate_yfinance_tickers(currency_symbol_list: List, self_exchange: bool):
 
 
 def get_data_from_yfinance(exchange_tickers: List, period=default_period, interval=default_interval, start=None, end=None):
-    return yf.download(exchange_tickers, period=period, interval=interval, start=start, end=end, group_by="ticker", repair=True, keepna=True, multi_level_index=False)
+    return yf.download(exchange_tickers, period=period, interval=interval, start=start, end=end, group_by="ticker", repair=True, keepna=True)
 
 
 def parse_response_from_yfinance(self, response: pd.DataFrame, exchange_tickers: List, update_conflicts: bool, verbose: bool):
@@ -151,12 +146,14 @@ def parse_response_from_yfinance(self, response: pd.DataFrame, exchange_tickers:
     """ 
     existing_currencies_dict = get_existing_currencies_dict()
     df = response
+    timestamp_col_name = df.index.name # "Date" or "Datetime"
     model_instances = []
     skipped = 0
     # (optional) create sets to delete
     created_base_currencies = set()
     created_quote_currencies = set()
-    created_timestamps = set()
+    created_dates = set()
+    time_is_null = timestamp_col_name=="Date"
     for exchange_ticker in exchange_tickers:
         ticker_df = df[exchange_ticker][["Open", "Close"]]
         base_currency_symbol = exchange_ticker[:3]
@@ -170,8 +167,9 @@ def parse_response_from_yfinance(self, response: pd.DataFrame, exchange_tickers:
                 continue
             _base_currency_obj_, existing_currencies_dict = get_currency_obj(self, base_currency_symbol, existing_currencies_dict)
             _quote_currency_obj_, existing_currencies_dict = get_currency_obj(self, quote_currency_symbol, existing_currencies_dict)
-            _timestamp_ = timezone.make_aware(timestamp.to_pydatetime())
-            model_instances.append(Rate(timestamp=_timestamp_,
+            (_date_, _time_) = separate_timestamp_values(timestamp, timestamp_col_name)
+            model_instances.append(Rate(date=_date_,
+                                        time=_time_,
                                         base_currency=_base_currency_obj_,
                                         quote_currency=_quote_currency_obj_,
                                         exchange_rate=_exchange_rate_))
@@ -179,11 +177,11 @@ def parse_response_from_yfinance(self, response: pd.DataFrame, exchange_tickers:
             # (optional) add values to delete
             created_base_currencies.add(_base_currency_obj_)
             created_quote_currencies.add(_quote_currency_obj_)
-            created_timestamps.add(timestamp)
+            created_dates.add(_date_)
 
     # (optional) delete values to update
     if update_conflicts:
-        remove_conflicting_values(self, created_timestamps, created_quote_currencies, created_quote_currencies)
+        remove_conflicting_values(self, created_dates, created_quote_currencies, created_quote_currencies, time_is_null)
     if skipped:
         self.stdout.write(self.style.WARNING(f"Skipped {skipped} rows containing NaN values."))
     return model_instances
@@ -209,6 +207,15 @@ def get_currency_obj(self, searched_currency: str, existing_currencies_dict: Dic
     return (found_obj, existing_currencies_dict)
 
 
+def separate_timestamp_values(timestamp: pd.Timestamp, timestamp_col_name: str):
+    timestamp = timestamp.to_pydatetime()
+    date = timestamp.date()
+    time = timestamp.time()
+    if (timestamp_col_name=="Date"):
+        return (date, None)
+    return (date, time)
+
+
 def check_rate_for_NaN_values(row):
     if not pd.isna(row["Close"]):
         return True, row["Close"]
@@ -216,11 +223,14 @@ def check_rate_for_NaN_values(row):
         return True, row["Open"]
     return False, None
 
+
 def remove_conflicting_values(self, 
-                              created_timestamps: Set, 
+                              created_dates: Set, 
                               created_base_currencies: Set, 
-                              created_quote_currencies: Set):
-    delete_qs = Rate.objects.filter(timestamp__in=created_timestamps,
+                              created_quote_currencies: Set,
+                              time_is_null: bool):
+    delete_qs = Rate.objects.filter(date__in=created_dates,
+                                    time__isnull=time_is_null,
                                     base_currency__in=created_base_currencies,
                                     quote_currency__in=created_quote_currencies)
     if (delete_qs):
