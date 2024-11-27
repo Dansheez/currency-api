@@ -11,11 +11,12 @@ class APITest(TestCase):
         self.quote_currency_code = "EUR"
         self.base_currency_obj = Currency.objects.create(code=self.base_currency_code)
         self.quote_currency_obj = Currency.objects.create(code=self.quote_currency_code)
+        base_time = datetime(2024, 1, 1, 12, 0, 0)
         self.obj = Rate.objects.create(base_currency=self.base_currency_obj,
                             quote_currency=self.quote_currency_obj,
                             exchange_rate=1.234,
-                            timestamp=timezone.make_aware(datetime(2024, 1, 1, 12, 0, 0)))
-
+                            time=base_time.time(),
+                            date=base_time.date())
     def test_get_currency_list(self):
         """
         Test if list request GET(/currency/) returns proper result.

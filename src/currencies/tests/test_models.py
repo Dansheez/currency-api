@@ -12,13 +12,14 @@ class RateTestCase(TestCase):
         self.quote_currency_code = "EUR"
         self.base_currency_obj = Currency.objects.create(code=self.base_currency_code)
         self.quote_currency_obj = Currency.objects.create(code=self.quote_currency_code)
-        self.base_time = timezone.make_aware(datetime(2024, 1, 1, 12, 0, 0))
+        self.base_time = datetime(2024, 1, 1, 12, 0, 0)
         self.number_of_obj = 10
         for i in range(0, self.number_of_obj):
             self.obj = Rate.objects.create(base_currency=self.base_currency_obj,
                                            quote_currency=self.quote_currency_obj,
                                            exchange_rate=1.234,
-                                           timestamp=self.base_time+timedelta(minutes=i)) 
+                                           time=(self.base_time+timedelta(minutes=i)).time(),
+                                           date=self.base_time.date())
         self.latest_obj = Rate.get_latest(base_currency__code=self.base_currency_code,
                                           quote_currency__code=self.quote_currency_code)
 
@@ -32,7 +33,8 @@ class RateTestCase(TestCase):
         """
         Tests Rate get_latest() method. 
         """
-        self.assertEqual(self.obj.timestamp, self.base_time+timedelta(minutes=self.number_of_obj-1))
+        self.assertEqual(self.obj.time, (self.base_time+timedelta(minutes=self.number_of_obj-1)).time())
+        self.assertEqual(self.obj.date, self.base_time.date())
 
 class CurrencyTestCase(TestCase):
     def setUp(self):

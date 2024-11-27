@@ -49,7 +49,6 @@ class YFinanceTestCase(TestCase):
         call_command(self.command_name, self.sample_symbols, start="2024-11-22", end="2024-11-24") # 1 row for each ticker
         currency_count = Currency.objects.count()
         self.assertEqual(currency_count, len(self.sample_symbol_list))
-        expected_rate_count = len(generate_yfinance_tickers(self.sample_symbol_list, False))
+        expected_rate_count = len(self.sample_symbol_list) + len(self.sample_symbol_list)*2 # self-exchange + permutation of each two currencies
         rate_count = Rate.objects.count()
         self.assertEqual(rate_count, expected_rate_count)
-
