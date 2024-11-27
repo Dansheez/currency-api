@@ -36,8 +36,7 @@ class APITest(TestCase):
 
     def test_get_invalid_rate_detail(self):
         """
-        Test if returns blank ({}) for invalid code.
+        Test if returns 404 for invalid currency code request.
         """
         response = self.client.get(f"/api/currency/{self.base_currency_code}/AAAA/")
-        self.assertEqual(response.status_code, 200) # HTTP_200_OK
-        self.assertEqual(response.json(), {})
+        self.assertEqual(response.status_code, 404)
